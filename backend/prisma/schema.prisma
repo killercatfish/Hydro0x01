@@ -1,0 +1,76 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id            Int      @id @default(autoincrement())
+  username      String   @unique
+  password_hash String
+  created_at    DateTime @default(now())
+}
+
+model Device {
+  id               Int            @id @default(autoincrement())
+  device_id        String         @unique
+  name             String?
+  location         String?
+  firmware_version String?
+  last_status      Json?
+  last_power       Json?
+  last_seen        DateTime?
+  status           String         @default("offline")
+  created_at       DateTime       @default(now())
+  ActuationLogs    ActuationLog[]
+}
+
+model SystemConfig {
+  id                  Int      @id @default(autoincrement())
+  deepSleepEnabled    Boolean  @default(false)
+  sleepDurationSec    Int      @default(0)
+  activeDurationMs    Int      @default(0)
+  sensorReadInterval  Int      @default(60000)
+  mqttPublishInterval Int      @default(60000)
+  phTargetMin         Float    @default(5.5)
+  phTargetMax         Float    @default(6.5)
+  ecTargetMin         Float    @default(1.0)
+  ecTargetMax         Float    @default(2.5)
+  pumpMinOnTime       Int      @default(1000)
+  pumpMaxOnTime       Int      @default(60000)
+  pumpCooldownTime    Int      @default(600000)
+  tankType            String?
+  tankDimA            Float?
+  tankDimB            Float?
+  tankFullH           Float?
+  tankEmptyD          Float?
+  updated_at          DateTime @updatedAt
+  created_at          DateTime @default(now())
+  device_name         String   @unique @default("__global__")
+  test_cmds           Boolean  @default(false)
+  telegram_enabled    Boolean  @default(false)
+  telegram_botToken   String?
+  telegram_chatId     String?
+  discord_enabled     Boolean  @default(false)
+  discord_webhookUrl  String?
+}
+
+model ActuationLog {
+  id         Int      @id @default(autoincrement())
+  deviceId   Int
+  action     String
+  payload    String
+  created_at DateTime @default(now())
+  device     Device   @relation(fields: [deviceId], references: [id])
+}
+
+model SystemAlert {
+  id         Int      @id @default(autoincrement())
+  device_id  String
+  type       String
+  message    String
+  resolved   Boolean  @default(false)
+  created_at DateTime @default(now())
+}
