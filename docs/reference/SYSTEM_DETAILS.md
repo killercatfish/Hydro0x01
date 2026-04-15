@@ -4,7 +4,7 @@
 HydroOne utilizes a high-performance, schema-driven architecture using Fastify and an edge-compatible React dashboard using Vite.
 
 ## Components
-1. **ESP32 Firmware**: Written in modern C++, communicates via MQTT v5 with TLS.
+1. **ESP32 Firmware**: Written in modern C++, communicates via MQTT.
 2. **Backend**: Fastify + Zod API with real-time Socket.io syncing.
 3. **Frontend**: Vite + React + Zustand + Tailwind SPA.
 4. **Data Infrastructure**: Prisma (PostgreSQL) for Config and Actuation logs, InfluxDB for time-series Telemetry data.

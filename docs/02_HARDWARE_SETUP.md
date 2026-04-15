@@ -330,6 +330,12 @@ Device (−) ──→ Battery/Power (−)
 - **Distance**: 5-200cm from surface.
 - **Avoid**: Installing directly above turbulent water or near a pump outlet where bubbles can cause false echoes.
 
+> 🧊 **PRO TIP: Reservoir Temperature Management**
+> Nutrient solution temperature is critical for healthy root growth and maintaining dissolved oxygen levels. 
+> * **Heat Control**: Reservoirs can heat up rapidly inside a greenhouse. If possible, place the main reservoir **outside** the grow area in a shaded spot.
+> * **Insulation**: Alternatively, bury the reservoir or use insulation (e.g., a pond liner with an insulated lid) to stabilize temperatures.
+> * **Chillers**: If using a water chiller, ensure it is placed in a separate, well-ventilated space. Chillers exhaust a significant amount of hot air, which can overheat your plants if kept in the same room.
+
 ### pH Probe
 - **Location**: Submerged in nutrient solution
 - **Storage**: Keep in storage solution when not in use
