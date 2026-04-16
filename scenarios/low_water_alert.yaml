@@ -1,0 +1,81 @@
+name: low_water_alert
+description: Simulates reservoir running low and validates pump activation and refill
+duration: 150
+author: killercatfish
+
+steps:
+  # Confirm healthy tank at start
+  - at: 5
+    action: assert_sensor
+    sensor: level_pct
+    op: gt
+    value: 50.0
+
+  - at: 5
+    action: log
+    message: "Tank level healthy — injecting low water fault"
+
+  # Drop the water level
+  - at: 20
+    action: inject_fault
+    sensor: level
+    magnitude: 2.0
+
+  # Level should be critically low
+  - at: 35
+    action: assert_sensor
+    sensor: level_pct
+    op: lt
+    value: 15.0
+
+  - at: 35
+    action: log
+    message: "Low water confirmed — backend should trigger pump"
+
+  # Backend should have sent pump on command
+  - at: 50
+    action: assert_cmd
+    cmd: pump
+    since: 20
+
+  # Simulate refill — clear fault and turn pump on
+  - at: 60
+    action: clear_fault
+    sensor: level
+
+  - at: 60
+    action: set_pump
+    value: true
+
+  - at: 60
+    action: log
+    message: "Pump on — refilling reservoir"
+
+  # Tank refilling
+  - at: 100
+    action: assert_sensor
+    sensor: level_pct
+    op: gt
+    value: 50.0
+
+  # Turn pump off
+  - at: 110
+    action: set_pump
+    value: false
+
+  - at: 110
+    action: assert_status
+    key: pump
+    value: "OFF"
+
+  # Final health check
+  - at: 140
+    action: assert_sensor
+    sensor: level_pct
+    op: in_range
+    min: 50.0
+    max: 100.0
+
+  - at: 140
+    action: log
+    message: "Reservoir restored — scenario complete"

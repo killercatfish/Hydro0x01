@@ -18,9 +18,24 @@ First off, thank you for considering contributing to HydroOne! It's people like 
 2. Hardware changes? Update `docs/02_HARDWARE_SETUP.md`.
 3. Firmware changes? Ensure code is compatible with the modular sensor architecture.
 4. UI changes? Maintain the glassmorphism aesthetic.
-5. Create a PR with a clear description of your changes.
+5. Simulator changes? Run `make test-sim` and ensure all tests pass before submitting.
+6. Create a PR with a clear description of your changes.
 
 ## 🛠️ Development Environment
+
+### No Hardware? No Problem.
+HydroOne includes a full CLI simulator so you can develop and test the entire stack without a physical ESP32. See [docs/09_SIMULATOR_GUIDE.md](docs/09_SIMULATOR_GUIDE.md) for setup.
+
+```bash
+# One-command setup
+make setup
+
+# Start the simulator (auto-starts Mosquitto broker)
+make sim
+
+# Run the full test suite (129 tests, no broker needed)
+make test-sim
+```
 
 ### Firmware
 - We use **PlatformIO**.
@@ -33,6 +48,12 @@ First off, thank you for considering contributing to HydroOne! It's people like 
 ### Frontend
 - React + Vite + Tailwind CSS.
 - Keep components small and focused.
+
+### Simulator & Tools
+- Python 3.10+, `paho-mqtt`, `rich`, `pyyaml`.
+- Run `make test-sim` before every PR — all 129 tests must pass.
+- New features should include corresponding tests in `tools/test_simulator.py`.
+- New fault scenarios should include a matching YAML file in `scenarios/`.
 
 ### Hardware (PCB & 3D Design)
 HydroOne is a physical system, and hardware contributions are highly encouraged!

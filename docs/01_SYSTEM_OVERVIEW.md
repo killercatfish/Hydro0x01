@@ -31,19 +31,28 @@ graph TD
         Frontend["Vite + React Dashboard"]
     end
 
+    subgraph "Developer Tooling"
+        Simulator["CLI Simulator (tools/simulator.py)"]
+        ScenarioRunner["Scenario Runner (tools/scenario_runner.py)"]
+        TestSuite["Test Suite (tools/test_simulator.py)"]
+    end
+
     %% Data Flow
     Device -- "Telemetry (MQTT v5)" --> Broker
+    Simulator -- "Simulated Telemetry (MQTT v5)" --> Broker
     Broker -- "Forward" --> Backend
     Backend -- "Real-time Update (Socket.io)" --> Frontend
     Frontend -- "REST Commands" --> Backend
-    Backend -- "Control Dispath (MQTT)" --> Broker
+    Backend -- "Control Dispatch (MQTT)" --> Broker
     Broker -- "Command" --> Device
+    Broker -- "Command (tested)" --> ScenarioRunner
+    ScenarioRunner -- "Drives" --> Simulator
 ```
 
 
 ## 🏗️ Core Architecture
 
-The system is divided into four main layers:
+The system is divided into four main layers plus a developer tooling layer:
 
 ### 1. Edge Layer (ESP32 Firmware)
 Our custom firmware is built for the **ESP32**. It handles sensor acquisition, local calibration logic, and direct relay control. It features a modular sensor architecture that avoids heap fragmentation.
@@ -58,7 +67,17 @@ The backend acts as the brain of the system:
 - **Command Dispatch**: Routes user actions from the dashboard to the devices.
 
 ### 4. Presentation Layer (React/Vite)
-A modern, responsive dashboard built with React 19 and Vite. It providing real-time visualization of your grow environment and full remote control over your hardware.
+A modern, responsive dashboard built with React 19 and Vite. It provides real-time visualization of your grow environment and full remote control over your hardware.
+
+### 5. Developer Tooling
+HydroOne includes a full hardware-free development environment so contributors can build, test, and demo the complete stack without a physical ESP32.
+
+- **`tools/simulator.py`** — CLI simulator that publishes realistic sensor telemetry on the exact MQTT topic schema used by the firmware. Includes physics-based sensor models, fault injection, and actuator control.
+- **`tools/scenario_runner.py`** — YAML-driven scenario runner for automated testing. Define sequences of faults and assertions; the runner plays them back and reports pass/fail.
+- **`tools/test_simulator.py`** — 5-layer production test suite (129 tests). Covers unit physics, MQTT integration, cross-sensor consistency, regression tests, and edge cases.
+- **`Makefile`** — one-command dev workflow: `make sim`, `make test-sim`, `make test`.
+
+See [docs/09_SIMULATOR_GUIDE.md](09_SIMULATOR_GUIDE.md) for full setup and usage.
 
 ## 📡 What's Inside?
 
@@ -66,8 +85,11 @@ For a deeper dive into each component, refer to the technical reference:
 - 🛠️ [**Backend Technical Reference**](./reference/BACKEND.md)
 - ⚛️ [**Frontend Technical Reference**](./reference/FRONTEND.md)
 - 📡 [**Network Topology Map**](../README.md#tech-stack)
+- 🧪 [**Simulator Guide**](./09_SIMULATOR_GUIDE.md)
 
 ---
 
 ### Next Steps:
 Ready to build? Move on to [**Step 2: Hardware Setup**](./02_HARDWARE_SETUP.md).
+
+> No hardware yet? Start with the [**Simulator Guide**](./09_SIMULATOR_GUIDE.md) to run the full stack locally.

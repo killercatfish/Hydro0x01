@@ -1,0 +1,64 @@
+name: ec_depletion
+description: Simulates nutrient depletion over time and validates low-EC alert response
+duration: 120
+author: killercatfish
+
+steps:
+  # Baseline check
+  - at: 5
+    action: assert_sensor
+    sensor: ec
+    op: in_range
+    min: 0.8
+    max: 3.5
+
+  - at: 5
+    action: log
+    message: "Baseline EC nominal — injecting depletion fault"
+
+  # Inject EC depletion
+  - at: 20
+    action: inject_fault
+    sensor: ec
+    magnitude: 2.5
+
+  # EC should be critically low
+  - at: 35
+    action: assert_sensor
+    sensor: ec
+    op: lt
+    value: 0.5
+
+  # Backend should have sent a dosing command
+  - at: 50
+    action: assert_cmd
+    cmd: pump
+    since: 20
+
+  - at: 50
+    action: log
+    message: "Dosing command expected — clearing depletion fault"
+
+  # Simulate nutrient top-up
+  - at: 70
+    action: clear_fault
+    sensor: ec
+
+  - at: 70
+    action: set_pump
+    value: true
+
+  - at: 80
+    action: set_pump
+    value: false
+
+  # EC should be recovering
+  - at: 110
+    action: assert_sensor
+    sensor: ec
+    op: gt
+    value: 0.5
+
+  - at: 110
+    action: log
+    message: "EC recovery confirmed"

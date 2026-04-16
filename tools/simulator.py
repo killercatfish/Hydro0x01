@@ -148,16 +148,20 @@ class SystemState:
         v = base + noise(self.t * 0.0005, 77) * 0.8 + self._fault("level") * (-45.0)
         return round(max(0.0, min(100.0, v)), 1)
 
-    def reservoir_distance(self):
-        pct = self.level_percent()
-        filled_cm = (pct / 100.0) * TANK_HEIGHT
-        distance_cm = TANK_HEIGHT - filled_cm
+    def reservoir_distance(self, level_pct=None):
+        # Accept pre-computed level to guarantee consistency within a publish cycle
+        pct = level_pct if level_pct is not None else self.level_percent()
+        filled_cm    = (pct / 100.0) * TANK_HEIGHT
+        distance_cm  = TANK_HEIGHT - filled_cm
         return round(distance_cm + noise(self.t * 0.001, 88) * 0.3, 1)
 
-    def level_litres(self):
-        return round((self.level_percent() / 100.0) * TANK_MAX_L, 2)
+    def level_litres(self, level_pct=None):
+        pct = level_pct if level_pct is not None else self.level_percent()
+        return round((pct / 100.0) * TANK_MAX_L, 2)
 
     def all_sensors(self):
+        # Snapshot level_percent once so distance and litres are consistent
+        level_pct = self.level_percent()
         return {
             "water_temp":   self.water_temp(),
             "air_temp":     self.air_temp(),
@@ -165,9 +169,9 @@ class SystemState:
             "pressure":     self.air_pressure(),
             "ph":           self.ph(),
             "ec":           self.ec(),
-            "distance":     self.reservoir_distance(),
-            "level_pct":    self.level_percent(),
-            "level_litres": self.level_litres(),
+            "distance":     self.reservoir_distance(level_pct),
+            "level_pct":    level_pct,
+            "level_litres": self.level_litres(level_pct),
         }
 
     def status_payload(self):
@@ -290,18 +294,20 @@ def build_sensor_table(s):
 
 
 def build_actuator_panel(s):
-    st = s.status_payload()
+    # Read state directly — avoids status_payload() lag on fast updates
+    pump  = s.pump_on
+    light = s.light_on
+    fan   = s.fan_on
     lines = []
-    lines.append(f"  Pump   [{'green' if st['pump']=='ON' else 'dim'}]{'■' if st['pump']=='ON' else '□'} {st['pump']}[/]")
-    lines.append(f"  Light  [{'yellow' if st['light']=='ON' else 'dim'}]{'■' if st['light']=='ON' else '□'} {st['light']}[/]")
-    lines.append(f"  Fan    [{'cyan' if st['fan']=='ON' else 'dim'}]{'■' if st['fan']=='ON' else '□'} {st['fan']}[/]")
-    lines.append(f"  Mode   [blue]{st['mode']}[/]")
-    if st["faults"]:
-        lines.append(f"  Faults [red]{', '.join(st['faults'])}[/]")
+    lines.append(f"  Pump   [{'green' if pump  else 'dim'}]{'■' if pump  else '□'} {'ON' if pump  else 'OFF'}[/]")
+    lines.append(f"  Light  [{'yellow' if light else 'dim'}]{'■' if light else '□'} {'ON' if light else 'OFF'}[/]")
+    lines.append(f"  Fan    [{'cyan' if fan   else 'dim'}]{'■' if fan   else '□'} {'ON' if fan   else 'OFF'}[/]")
+    lines.append(f"  Mode   [blue]{s.mode}[/]")
+    if s.faults:
+        lines.append(f"  Faults [red]{', '.join(s.faults.keys())}[/]")
     else:
         lines.append("  Faults [green]none[/]")
-    lines.append(f"  Uptime {st['uptime_s']}s")
-    lines.append(f"  RSSI   {st['rssi']} dBm")
+    lines.append(f"  Uptime {int(s.elapsed())}s")
     return "\n".join(lines)
 
 
@@ -411,31 +417,39 @@ def main():
     console = Console()
     next_publish = time.time()
 
-    # Key input thread (non-blocking)
-    import termios, tty, select
+    # ── Keyboard input in a background thread ─────────────────────────────────
+    # Rich Live (screen=True) manages the terminal — running termios inside the
+    # Live loop conflicts with it and drops keypresses.  Reading on a separate
+    # thread with a queue avoids the collision entirely.
+    import queue
+    import termios, tty
 
-    def getch_noblock():
-        """Return pressed key or None without blocking."""
-        fd = sys.stdin.fileno()
+    key_queue = queue.Queue()
+    stop_input = threading.Event()
+
+    def input_thread():
+        fd  = sys.stdin.fileno()
         old = termios.tcgetattr(fd)
         try:
             tty.setcbreak(fd)
-            r, _, _ = select.select([sys.stdin], [], [], 0)
-            if r:
-                return sys.stdin.read(1)
-        except Exception:
-            pass
+            while not stop_input.is_set():
+                try:
+                    ch = sys.stdin.read(1)
+                    if ch:
+                        key_queue.put(ch)
+                except Exception:
+                    break
         finally:
             termios.tcsetattr(fd, termios.TCSADRAIN, old)
-        return None
+
+    t = threading.Thread(target=input_thread, daemon=True)
+    t.start()
 
     FAULT_MAP = {
-        "1": ("ph",      -1.0,  "pH crash injected"),
-        "2": ("ec",      -0.8,  "EC depletion injected"),
-        "3": ("temp",    +1.0,  "Temp spike injected"),
-        "4": None,
-        "5": None,
-        "6": ("level",   -1.0,  "Low water injected"),
+        "1": ("ph",    1.5,  "pH crash injected"),
+        "2": ("ec",    2.5,  "EC depletion injected"),
+        "3": ("temp",  1.0,  "Temp spike injected"),
+        "6": ("level", 2.0,  "Low water injected"),
     }
 
     with Live(render(state, connected, args.broker),
@@ -444,8 +458,7 @@ def main():
             now = time.time()
 
             # Advance sim time
-            state.t += args.speed * (now - (now - 0.01))  # tiny increment each frame
-            state.t += args.speed * 0.25   # ~1 sim-second per 0.25 real-sec at 4fps
+            state.t += args.speed * 0.25
 
             # Publish every INTERVAL seconds
             if now >= next_publish:
@@ -454,17 +467,17 @@ def main():
                 ts_iso  = datetime.utcnow().isoformat() + "Z"
 
                 publishes = [
-                    ("sensors/water/temperature", sensors["water_temp"]),
-                    ("sensors/air/temperature",   sensors["air_temp"]),
-                    ("sensors/air/humidity",      sensors["humidity"]),
-                    ("sensors/air/pressure",      sensors["pressure"]),
-                    ("sensors/water/ph",          sensors["ph"]),
-                    ("sensors/water/ec",          sensors["ec"]),
-                    ("sensors/reservoir/distance",sensors["distance"]),
+                    ("sensors/water/temperature",  sensors["water_temp"]),
+                    ("sensors/air/temperature",    sensors["air_temp"]),
+                    ("sensors/air/humidity",       sensors["humidity"]),
+                    ("sensors/air/pressure",       sensors["pressure"]),
+                    ("sensors/water/ph",           sensors["ph"]),
+                    ("sensors/water/ec",           sensors["ec"]),
+                    ("sensors/reservoir/distance", sensors["distance"]),
                     ("sensors/water/level_percent",sensors["level_pct"]),
                     ("sensors/water/level_litres", sensors["level_litres"]),
-                    ("status",                    json.dumps(state.status_payload())),
-                    ("heartbeat",                 ts_iso),
+                    ("status",                     json.dumps(state.status_payload())),
+                    ("heartbeat",                  ts_iso),
                 ]
 
                 for suffix, payload in publishes:
@@ -474,14 +487,14 @@ def main():
                         client.publish(topic, msg, qos=1)
                     state.mqtt_out.append((topic, msg))
 
-                # Keep mqtt_out buffer small
                 if len(state.mqtt_out) > 60:
                     state.mqtt_out = state.mqtt_out[-60:]
 
-            # Keyboard
-            key = getch_noblock()
-            if key:
+            # Drain key queue
+            while not key_queue.empty():
+                key = key_queue.get_nowait()
                 if key == "q":
+                    stop_input.set()
                     break
                 elif key == "r":
                     state.reset()
@@ -495,13 +508,16 @@ def main():
                 elif key == "5":
                     state.pump_on = False
                     state.log.append(("[dim]pump OFF (manual)[/dim]", datetime.now()))
-                elif key in FAULT_MAP and FAULT_MAP[key]:
+                elif key in FAULT_MAP:
                     fkey, mag, label = FAULT_MAP[key]
                     state.inject(fkey, mag)
                     state.log.append((f"[red]FAULT: {label}[/red]", datetime.now()))
 
                 if len(state.log) > 80:
                     state.log = state.log[-80:]
+
+            if stop_input.is_set():
+                break
 
             live.update(render(state, connected, args.broker))
             time.sleep(0.25)

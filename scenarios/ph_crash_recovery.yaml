@@ -1,0 +1,79 @@
+name: ph_crash_recovery
+description: Simulates a sudden pH crash and validates backend response and recovery
+duration: 180
+author: killercatfish
+
+steps:
+  # Confirm nominal start
+  - at: 5
+    action: assert_sensor
+    sensor: ph
+    op: in_range
+    min: 5.5
+    max: 7.5
+
+  - at: 5
+    action: assert_sensor
+    sensor: ec
+    op: in_range
+    min: 0.5
+    max: 3.5
+
+  - at: 5
+    action: log
+    message: "System nominal — injecting pH fault"
+
+  # Inject pH crash at t+30s
+  - at: 30
+    action: inject_fault
+    sensor: ph
+    magnitude: 1.5
+
+  # pH should be out of range shortly after
+  - at: 45
+    action: assert_sensor
+    sensor: ph
+    op: lt
+    value: 5.5
+
+  # Backend should have sent a cmd/ph calibration response
+  # (requires HydroOne backend running)
+  - at: 60
+    action: assert_cmd
+    cmd: ph
+    since: 30
+
+  - at: 60
+    action: log
+    message: "Clearing fault — simulating dosing correction"
+
+  # Clear fault at t+90s (simulate pH up dose)
+  - at: 90
+    action: clear_fault
+    sensor: ph
+
+  # pH should recover to safe range
+  - at: 150
+    action: assert_sensor
+    sensor: ph
+    op: in_range
+    min: 5.5
+    max: 7.5
+
+  - at: 150
+    action: log
+    message: "pH recovered — scenario complete"
+
+  # Final system health check
+  - at: 170
+    action: assert_sensor
+    sensor: ec
+    op: in_range
+    min: 0.5
+    max: 3.5
+
+  - at: 170
+    action: assert_sensor
+    sensor: level_pct
+    op: gt
+    value: 10.0
